@@ -54,6 +54,7 @@ typedef void (*interrupt_change_fn_t)(void);
 struct pwm_channel_t {
   int interrupt_pin;
   state_t next_state;
+  int number_of_interrupts;
   unsigned long first_rising_time;
   unsigned long second_falling_time;
   unsigned long third_rising_time;
@@ -95,6 +96,7 @@ void falling(const int chan_index) {
 static volatile int chan_index;
 
 void change_cb_channel() {
+  pwm_channels[chan_index].number_of_interrupts++;
   if (digitalRead(pwm_channels[chan_index].interrupt_pin) == HIGH) {
     rising(chan_index);
   } else {
@@ -114,14 +116,13 @@ void setup() {
 
 void start_measurement(volatile pwm_channel_t *pwm_channel) {
   pwm_channel->next_state = first_rising;
+  pwm_channel->number_of_interrupts = 0;
   attachInterrupt(digitalPinToInterrupt(pwm_channel->interrupt_pin), pwm_channel->interrupt_change_cb, CHANGE);
 }
 
 void stop_measurement(volatile pwm_channel_t *pwm_channel) {
+  pwm_channel->pin_state = (digitalRead(pwm_channel->interrupt_pin)==HIGH ? pin_state_high : pin_state_low);
   detachInterrupt(digitalPinToInterrupt(pwm_channel->interrupt_pin));
-  if (pwm_channel->next_state != finished) {
-    pwm_channel->pin_state = (digitalRead(pwm_channel->interrupt_pin)==HIGH ? pin_state_high : pin_state_low);
-  }
 }
 
 #define MAX_ULONG ((unsigned long)0xffffffff)
@@ -149,13 +150,15 @@ void print_measurement(volatile pwm_channel_t *pwm_channel) {
     Serial.print(".");
     Serial.print(freq_dHz%10);
     Serial.print(")");
-  } else {
+  } else if (pwm_channel->number_of_interrupts == 0) {
     Serial.print("(");
     if (pwm_channel->pin_state == pin_state_high) {
       Serial.print("100.0, 0.0)");
     } else {
       Serial.print("0.0, 0.0)");
     }
+  } else {
+    Serial.print("(-1.0, -1.0)");
   }
 }
 
